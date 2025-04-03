@@ -1,4 +1,5 @@
 ﻿
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using System.Collections.Concurrent;
@@ -9,8 +10,8 @@ using TextProcessor.Models;
 namespace TextProcessor.Services
 {
     internal sealed class TextProcessService(
+        IServiceProvider serviceProvider,
         ILogger<TextProcessService> logger,
-        FileReaderByLine fileReaderByLine,
         DbGateway db) : BackgroundService
     {
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -18,7 +19,6 @@ namespace TextProcessor.Services
             await Task.Delay(500);
             logger.LogInformation("Start service!");
             bool exit = false;
-            ConcurrentDictionary<string, int> wordStatictics = new();
             try
             {
                 while (!exit && !stoppingToken.IsCancellationRequested)
@@ -29,8 +29,13 @@ namespace TextProcessor.Services
                         case 1:
                             {
                                 var filePath = Client.GetFilePathFromUser();
-                                Task.Run(async () => await TextProcessTask(filePath, wordStatictics, stoppingToken));
+                                Task.Run(async () =>
+                                {
+                                    ConcurrentDictionary<string, int> wordStatictics = new();
+                                    await TextProcessTask(filePath, wordStatictics, stoppingToken);
+                                });
                                 break;
+                            
                             }
                         case 2:
                             await db.DeleteAllWordsAsync();
@@ -44,7 +49,7 @@ namespace TextProcessor.Services
                     }
                 }
             }
-            catch (OperationCanceledException) 
+            catch (OperationCanceledException)
             {
                 logger.LogInformation("Exit application...");
             }
@@ -69,7 +74,11 @@ namespace TextProcessor.Services
         private async Task<List<WordDetector>> FileHandle(string filePath, ConcurrentDictionary<string, int> wordStatictics, CancellationToken stoppingToken)
         {
             //read to concurrent dictionary
-            await fileReaderByLine.ReadAsync(filePath, wordStatictics, stoppingToken);
+            using (var scope = serviceProvider.CreateAsyncScope())
+            {
+                var fileReaderByLine = serviceProvider.GetRequiredService<FileReaderByLine>();
+                await fileReaderByLine.ReadAsync(filePath, wordStatictics, stoppingToken);
+            }
 
             var resultHandle = wordStatictics
                 .Where(x => x.Value > 2)

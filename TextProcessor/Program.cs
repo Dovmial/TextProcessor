@@ -17,7 +17,7 @@ builder.Services.AddDbService(configuration);
 
 builder.Services.AddHostedService<TextProcessService>();
 
-builder.Services.AddSingleton<FileReaderByLine>();
+builder.Services.AddTransient<FileReaderByLine>();
 builder.Services.AddScoped<DbGateway>();
 
 var app = builder.Build();
